@@ -4,10 +4,6 @@
 #include <conio.h>
 #include <time.h>
 
-int bossDirY = 1;
-int gameOver = 0;
-
-
 #define WIDTH 90
 #define HEIGHT 28
 
@@ -18,6 +14,10 @@ int gameOver = 0;
 #define BASE_FPS 22
 #define SHOOT_COOLDOWN 6
 
+// -------- FUNCTION PROTOTYPES --------
+void showGameOver();
+
+// -------- STRUCTS --------
 typedef struct{
     int x,y,speed,type;
 }Enemy;
@@ -26,6 +26,7 @@ typedef struct{
     int x,y,active;
 }Bullet;
 
+// -------- GLOBALS --------
 Enemy enemies[MAX_ENEMIES];
 Bullet bullets[MAX_BULLETS];
 Bullet bossBullets[MAX_BOSS_BULLETS];
@@ -46,10 +47,11 @@ int level=1;
 
 int shootTimer=0;
 
-int bossHP=500;
+int bossHP=200; // reduced
 int bossX=65;
 int bossY=8;
 int bossDir=1;
+int bossDirY=1;
 
 int terrainOffset=0;
 
@@ -58,7 +60,9 @@ int bg1=0,bg2=0,bg3=0;
 int highscore=0;
 
 int gameSpeed=BASE_FPS;
+int gameOver=0;
 
+// -------- SPRITES --------
 char *dino[4]={
 "  __ ",
 " (oo)",
@@ -77,6 +81,8 @@ char *enemy2[3]={
 "(xx)",
 "/||\\"
 };
+
+// -------- FUNCTIONS --------
 
 void setLevelColor()
 {
@@ -99,7 +105,7 @@ if(level==3) printf("The skies darken.\n");
 if(level==4) printf("You feel the boss nearby.\n");
 if(level==5) printf("The final shard awaits.\n");
 
-printf("\nPress any key to continue...");
+printf("\nPress any key...");
 getch();
 }
 
@@ -123,6 +129,7 @@ screen[y][x+i]=text[i];
 void drawSprite(char **sprite,int h,int x,int y)
 {
 for(int i=0;i<h;i++)
+if(y+i>=0 && y+i<HEIGHT)
 drawText(x,y+i,sprite[i]);
 }
 
@@ -210,8 +217,10 @@ break;
 
 void physics()
 {
-velocity+=gravity;
-dinoY+=velocity;
+velocity += gravity;
+if(velocity > 5) velocity = 5;
+
+dinoY += velocity;
 
 if(dinoY>HEIGHT-6)
 {
@@ -224,15 +233,15 @@ void updateEnemies()
 {
 for(int i=0;i<MAX_ENEMIES;i++)
 {
-enemies[i].x-=enemies[i].speed;
+enemies[i].x -= enemies[i].speed;
 
 if(enemies[i].x<0)
-enemies[i].x=WIDTH+rand()%60;
+enemies[i].x = WIDTH + rand()%60;
 
-if(abs(enemies[i].x-dinoX)<4 &&
-abs(enemies[i].y-dinoY)<3)
+if(abs(enemies[i].x-dinoX)<2 &&
+   abs(enemies[i].y-dinoY)<2)
 {
-health-=10;
+health -= 10;
 
 if(health<=0)
 {
@@ -250,24 +259,22 @@ void updateBullets()
 for(int i=0;i<MAX_BULLETS;i++)
 if(bullets[i].active)
 {
-bullets[i].x++;
+bullets[i].x += 2;
 
 if(bullets[i].x>WIDTH)
 bullets[i].active=0;
 
-/* enemy hit */
 for(int j=0;j<MAX_ENEMIES;j++)
-if(abs(bullets[i].x-enemies[j].x)<3 &&
-abs(bullets[i].y-enemies[j].y)<2)
+if(abs(bullets[i].x-enemies[j].x)<2 &&
+   abs(bullets[i].y-enemies[j].y)<2)
 {
 score+=20;
 enemies[j].x=WIDTH+rand()%80;
 bullets[i].active=0;
 }
 
-/* boss hit */
-if(abs(bullets[i].x-bossX)<8 &&
-abs(bullets[i].y-bossY)<4)
+if(abs(bullets[i].x-bossX)<6 &&
+   abs(bullets[i].y-bossY)<3)
 {
 bossHP-=10;
 bullets[i].active=0;
@@ -288,8 +295,8 @@ bossBullets[i].x--;
 if(bossBullets[i].x<0)
 bossBullets[i].active=0;
 
-if(abs(bossBullets[i].x-dinoX)<3 &&
-abs(bossBullets[i].y-dinoY)<2)
+if(abs(bossBullets[i].x-dinoX)<2 &&
+   abs(bossBullets[i].y-dinoY)<2)
 {
 health-=10;
 bossBullets[i].active=0;
@@ -315,13 +322,9 @@ void drawParallax()
 {
 for(int x=0;x<WIDTH;x++)
 {
-int y1=(x+bg1)%6;
-int y2=(x+bg2)%10;
-int y3=(x+bg3)%14;
-
-screen[y1][x]='.';
-screen[y2][x]='*';
-screen[y3][x]='+';
+screen[(x+bg1)%6][x]='.';
+screen[(x+bg2)%10][x]='*';
+screen[(x+bg3)%14][x]='+';
 }
 }
 
@@ -353,7 +356,7 @@ drawSprite(enemy2,3,enemies[i].x,enemies[i].y);
 
 for(int i=0;i<MAX_BULLETS;i++)
 if(bullets[i].active)
-drawText(bullets[i].x,bullets[i].y,">");
+drawText(bullets[i].x,bullets[i].y,">>");
 
 render();
 
@@ -365,17 +368,13 @@ void showGameOver()
 {
 system("cls");
 
-printf("\n\n");
-printf("#############################\n");
-printf("        GAME OVER\n");
-printf("#############################\n\n");
-
+printf("\nGAME OVER\n");
 printf("Score: %d\n",score);
 printf("Highscore: %d\n",highscore);
 
 saveHighscore();
 
-printf("\nPress any key to exit...");
+printf("\nPress any key...");
 getch();
 
 exit(0);
@@ -383,66 +382,111 @@ exit(0);
 
 void bossFight()
 {
-while(bossHP>0)
-{
-clearBuffer();
+    initBullets();
 
-drawParallax();
-drawGround();
+    bossHP = 200;
+    bossX = 65;
+    bossY = 6;
 
-drawSprite(dino,4,dinoX,dinoY);
+    int moveTimer = 0;
 
-bossX+=bossDir;
-bossY+=bossDirY;
+    while(bossHP > 0)
+    {
+        clearBuffer();
 
-if(bossX>75 || bossX<40)
-bossDir*=-1;
+        drawParallax();
+        drawGround();
 
-if(bossY>12 || bossY<4)
-bossDirY*=-1;
+        drawSprite(dino,4,dinoX,dinoY);
 
+        // -------- BOSS MOVEMENT --------
+        moveTimer++;
 
-drawText(bossX,bossY,"  /MMMMMMMM\\  ");
-drawText(bossX,bossY+1," |  O    O  | ");
-drawText(bossX,bossY+2," |   ----   | ");
-drawText(bossX,bossY+3,"  \\MMMMMMMM/ ");
+        if(moveTimer % 20 == 0)
+        {
+            if(dinoY < bossY) bossY--;
+            else if(dinoY > bossY) bossY++;
+        }
 
-bossShoot();
-updateBossBullets();
+        // -------- DRAW BOSS --------
+        drawText(bossX, bossY,     "  /MMMM\\  ");
+        drawText(bossX, bossY + 1, " | O  O | ");
+        drawText(bossX, bossY + 2, " | ---- | ");
+        drawText(bossX, bossY + 3, "  \\____/  ");
 
-for(int i=0;i<MAX_BOSS_BULLETS;i++)
-if(bossBullets[i].active)
-drawText(bossBullets[i].x,bossBullets[i].y,"<<<");
+        // -------- BOSS SHOOT --------
+        if(rand()%15 == 0)
+        {
+            for(int i=0;i<MAX_BOSS_BULLETS;i++)
+            if(!bossBullets[i].active)
+            {
+                bossBullets[i].active = 1;
+                bossBullets[i].x = bossX - 1;
+                bossBullets[i].y = bossY + (rand()%3);
+                break;
+            }
+        }
 
-for(int i=0;i<MAX_BULLETS;i++)
-if(bullets[i].active)
-{
-drawText(bullets[i].x,bullets[i].y,"==>");
-drawText(bullets[i].x,bullets[i].y+1,"==>");
-drawText(bullets[i].x,bullets[i].y+2,"==>");
-}
+        updateBossBullets();
 
-render();
+        // draw boss bullets
+        for(int i=0;i<MAX_BOSS_BULLETS;i++)
+        if(bossBullets[i].active)
+            drawText(bossBullets[i].x,bossBullets[i].y,"<");
 
-printf("BOSS HP: %d | PLAYER HP: %d\n",bossHP,health);
+        // -------- PLAYER BULLETS --------
+        for(int i=0;i<MAX_BULLETS;i++)
+        if(bullets[i].active)
+        {
+            drawText(bullets[i].x,bullets[i].y,">>");
 
+            if(bullets[i].x >= bossX-1 &&
+               bullets[i].x <= bossX + 12 &&
+               bullets[i].y >= bossY-1 &&
+               bullets[i].y <= bossY + 4)
+            {
+                bossHP -= 10;
+                bullets[i].active = 0;
+                score += 50;
+            }
+        }
 
-if(kbhit())
-{
-char ch=getch();
-if(ch=='j' && velocity==0) velocity=-7;
-if(ch=='s') shoot();
-}
+        render();
 
-physics();
-updateBullets();
-updateTerrain();
+        // -------- UI --------
+        printf("BOSS HP: [");
+        int bar = bossHP / 10;
+        for(int i=0;i<20;i++)
+            printf(i < bar ? "#" : " ");
+        printf("] %d\n", bossHP);
 
-Sleep(1000/gameSpeed);
-}
+        printf("PLAYER HP: %d\n", health);
 
-printf("\nBOSS DEFEATED!\n");
-Sleep(2000);
+        // -------- INPUT --------
+        if(kbhit())
+        {
+            char ch=getch();
+
+            if(ch=='j' && velocity==0) velocity=-7;
+
+            // ✅ FIX: manual shooting works now
+            if(ch=='s') shoot();
+        }
+
+        // ✅ OPTIONAL: smoother auto-fire (can remove if unwanted)
+        if(shootTimer == 0)
+            shoot();
+
+        // -------- UPDATE --------
+        physics();
+        updateTerrain();
+        updateBullets(); // IMPORTANT: keeps cooldown working
+
+        Sleep(1000/gameSpeed);
+    }
+
+    printf("\nBOSS DEFEATED!\n");
+    Sleep(2000);
 }
 
 void gameLoop()
@@ -455,7 +499,7 @@ levelDialogue();
 initEnemies();
 initBullets();
 
-gameSpeed=BASE_FPS+(level*3);
+gameSpeed=BASE_FPS+(level*1);
 
 int target=level*500;
 
@@ -474,8 +518,6 @@ updateBullets();
 updateTerrain();
 
 drawGame();
-
-score++;
 
 Sleep(1000/gameSpeed);
 }
@@ -513,7 +555,6 @@ hideCursor();
 loadHighscore();
 
 menu();
-
 gameLoop();
 
 saveHighscore();
